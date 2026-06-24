@@ -1,0 +1,9 @@
+# Игнорировать все файлы с расширением .env
+*.env
+.env.local
+.env.*.local
+digital_venv/
+api_keys.env
+
+# Исключение: разрешить отслеживать только шаблон настроек
+!.env.example
