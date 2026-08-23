@@ -80,7 +80,7 @@ if [ ${#MISSING_VARS[@]} -ne 0 ]; then
     for var in "${MISSING_VARS[@]}"; do
         log_error "  - $var"
     done
-    log_error "Заполните файл src/api_keys.env на основе .env.example"
+    log_error "Заполните файл .env в корне проекта на основе .env.example"
     exit 1
 fi
 

@@ -11,8 +11,10 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ── Загрузка переменных окружения ──
-ENV_PATH = BASE_DIR / "src" / "api_keys.env"
-load_dotenv(ENV_PATH)
+# Основной источник конфигурации — .env в корне проекта.
+# src/api_keys.env — legacy-фолбэк для локального запуска вне Docker.
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / "src" / "api_keys.env")
 
 # ── API‑ключи ──
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -33,6 +35,7 @@ REDIS_TTL = int(os.getenv("REDIS_TTL", "86400"))  # 24 часа
 # ── Пути ──
 DATA_DIR = BASE_DIR / "data"
 PROMPTS_DIR = BASE_DIR / "utils" / "prompts"
+MODELS_CONFIG_PATH = BASE_DIR / "config" / "models.json"
 HF_MODELS_CACHE = BASE_DIR / "src" / "hf_models_cache"
 
 # Локальная папка с моделью bge-m3 (если есть — офлайн‑режим)
