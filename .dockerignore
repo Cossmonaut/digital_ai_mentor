@@ -1,0 +1,92 @@
+# ===========================================
+# .dockerignore - файлы, исключаемые из контекста сборки Docker
+# ===========================================
+
+# Git
+.git
+.gitignore
+
+# Виртуальные окружения
+*venv*
+env/
+digital_venv/
+__pycache__/
+*/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Файлы окружения и секреты
+.env
+.env.local
+.env.*.local
+src/api_keys.env
+utils/graph_params.json
+
+# Логи
+logs/
+*.log
+
+# Кэш моделей (тяжелые, скачиваются при запуске)
+src/hf_models_cache/
+utils/hf_models_cache/
+
+# Базы данных Neo4j (используются volumes)
+neo4j_data/
+neo4j_logs/
+neo4j_data*
+
+# Исходные тяжелые файлы (PDF, FB2, DOC)
+gref_books/
+data/raw/
+*.zip
+*.fb2
+*.doc
+*.docx
+*.pdf
+
+# Jupyter Notebooks (не нужны в продакшене)
+*.ipynb
+src/test.ipynb
+utils/graphrag.ipynb
+utils/pdf_parser.ipynb
+utils/parse_yt_txt.ipynb
+
+# Старые файлы и черновики
+src/knowledge_base.py
+src/llm.py
+src/main.py
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yaml
+utils/docker-compose.yaml
+
+# Документация
+README.md
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Тесты и покрытие
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Временные файлы
+*.tmp
+*.temp
+tmp/
+temp/
