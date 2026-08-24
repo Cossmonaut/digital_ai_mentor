@@ -75,19 +75,23 @@ class LLMFactory:
         api_key = self._resolve_api_key(model_cfg["api_key_env"])
         model_name = model_cfg.get("model_id")
         temperature = model_cfg.get("temperature", MAIN_LLM_TEMPERATURE)
+        context_window = model_cfg.get("context_window")
 
         if provider == "openai_like":
-            llm = OpenAILike(
-                api_base=base_url,
-                api_key=api_key,
-                model=model_name,
-                is_chat_model=True,
-                is_function_calling_model=model_cfg.get(
+            llm_kwargs = {
+                "api_base": base_url,
+                "api_key": api_key,
+                "model": model_name,
+                "is_chat_model": True,
+                "is_function_calling_model": model_cfg.get(
                     "is_function_calling_model", False
                 ),
-                temperature=temperature,
-                timeout=model_cfg.get("timeout", 60),
-            )
+                "temperature": temperature,
+                "timeout": model_cfg.get("timeout", 60),
+            }
+            if context_window:
+                llm_kwargs["context_window"] = int(context_window)
+            llm = OpenAILike(**llm_kwargs)
         elif provider == "gigachat":
             llm = GigaChat(
                 credentials=api_key,
@@ -97,11 +101,14 @@ class LLMFactory:
                 temperature=temperature,
             )
         elif provider == "minimax":
-            llm = MiniMax(
-                model=model_name,
-                api_key=api_key,
-                temperature=temperature,
-            )
+            llm_kwargs = {
+                "model": model_name,
+                "api_key": api_key,
+                "temperature": temperature,
+            }
+            if context_window:
+                llm_kwargs["context_window"] = int(context_window)
+            llm = MiniMax(**llm_kwargs)
         else:
             raise ValueError(f"Неизвестный провайдер: {provider}")
 

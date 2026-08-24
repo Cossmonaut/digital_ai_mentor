@@ -1,44 +1,50 @@
 {
-  "default": "cloud_ru_claude",
+  "default": "cloud_ru_deepseek",
   "fallback_order": [
-    "gigachat_latest",
-    "gigachat_max",
-    "minimax_m3"
+    "cloud_ru_glm_air",
+    "cloud_ru_deepseek-flash",
+    "cloud_ru_mimo_pro"
   ],
   "models": {
-    "cloud_ru_claude": {
+    "cloud_ru_deepseek": {
       "provider": "openai_like",
       "base_url": "https://foundation-models.api.cloud.ru/v1",
       "api_key_env": "CLOUD_RU_API_KEY",
-      "model_id": "anthropic/claude-sonnet-4.6",
+      "model_id": "deepseek-ai/DeepSeek-V4-Pro",
       "is_function_calling_model": true,
       "temperature": 0.1,
-      "timeout": 60
+      "timeout": 60,
+      "context_window": 1048576
     },
-    "gigachat_latest": {
-      "provider": "gigachat",
-      "base_url": "https://gigachat.devices.sberbank.ru/api/v1",
-      "api_key_env": "GIGACHAT_API_KEY",
-      "model_id": "GigaChat:latest",
-      "scope": "GIGACHAT_API_PERS",
-      "verify_ssl_certs": false,
-      "temperature": 0.1
+    "cloud_ru_glm_air": {
+      "provider": "openai_like",
+      "base_url": "https://foundation-models.api.cloud.ru/v1",
+      "api_key_env": "CLOUD_RU_API_KEY",
+      "model_id": "z-ai/glm-4.5-air",
+      "is_function_calling_model": true,
+      "temperature": 0.1,
+      "timeout": 60,
+      "context_window": 131072
     },
-    "gigachat_max": {
-      "provider": "gigachat",
-      "base_url": "https://gigachat.devices.sberbank.ru/api/v1",
-      "api_key_env": "GIGACHAT_API_KEY",
-      "model_id": "GigaChat-Max",
-      "scope": "GIGACHAT_API_PERS",
-      "verify_ssl_certs": false,
-      "temperature": 0.1
+    "cloud_ru_deepseek-flash": {
+      "provider": "openai_like",
+      "base_url": "https://foundation-models.api.cloud.ru/v1",
+      "api_key_env": "CLOUD_RU_API_KEY",
+      "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+      "is_function_calling_model": true,
+      "temperature": 0.1,
+      "timeout": 60,
+      "context_window": 1048576
     },
-    "minimax_m3": {
-      "provider": "minimax",
-      "base_url": "https://api.minimax.chat/v1",
-      "api_key_env": "MINIMAX_API_KEY",
-      "model_id": "MiniMax-M3",
-      "temperature": 0.1
+    "cloud_ru_mimo_pro": {
+      "provider": "openai_like",
+      "base_url": "https://foundation-models.api.cloud.ru/v1",
+      "api_key_env": "CLOUD_RU_API_KEY",
+      "model_id": "xiaomi/mimo-v2.5-pro",
+      "is_function_calling_model": true,
+      "temperature": 0.1,
+      "timeout": 60,
+      "context_window": 1048576
     }
   }
 }
