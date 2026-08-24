@@ -1,0 +1,78 @@
+# ===========================================
+# Docker Compose для Digital Mentor
+# Все параметры подставляются из .env в корне проекта.
+# Данные контейнеров монтируются в ./docker/ (не коммитятся в git).
+# ===========================================
+
+services:
+  # 1. Приложение Digital Mentor (Telegram-бот)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digital_mentor_app
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - NEO4J_URL=bolt://neo4j:7687
+      - REDIS_URL=redis://redis_cache:6379
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      redis_cache:
+        condition: service_started
+    volumes:
+      - ./data:/app/data:ro
+      - ./docker/logs:/app/logs
+    # В приложении нет HTTP-сервера (бот работает через long polling),
+    # поэтому healthcheck из Dockerfile заменён на тривиальный
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 2. Графовая база данных Neo4j
+  neo4j:
+    image: neo4j:5.26.0
+    container_name: mentor_neo4j
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      - NEO4J_PLUGINS=["apoc"]
+      # ИСПРАВЛЕНО: пароль берётся из .env, а не захардкожен —
+      # NEO4J_AUTH синхронизирован с NEO4J_PASSWORD приложения
+      - NEO4J_AUTH=${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD}
+    volumes:
+      - ./docker/neo4j/data:/data
+      - ./docker/neo4j/plugins:/plugins
+      - ./docker/neo4j/logs:/logs
+    restart: always
+    healthcheck:
+      # Парсим логин/пароль из NEO4J_AUTH, чтобы не пробрасывать
+      # NEO4J_PASSWORD/NEO4J_USERNAME — иначе Neo4j 5.x видит в них
+      # невалидные config-опции PASSWORD/USERNAME и падает на strict validation.
+      test: ["CMD-SHELL", "cypher-shell -u \"$${NEO4J_AUTH%%/*}\" -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 3. Кэш Redis
+  redis_cache:
+    image: redis:7-alpine
+    container_name: mentor_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./docker/redis/data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

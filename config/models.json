@@ -1,0 +1,44 @@
+{
+  "default": "cloud_ru_claude",
+  "fallback_order": [
+    "gigachat_latest",
+    "gigachat_max",
+    "minimax_m3"
+  ],
+  "models": {
+    "cloud_ru_claude": {
+      "provider": "openai_like",
+      "base_url": "https://foundation-models.api.cloud.ru/v1",
+      "api_key_env": "CLOUD_RU_API_KEY",
+      "model_id": "anthropic/claude-sonnet-4.6",
+      "is_function_calling_model": true,
+      "temperature": 0.1,
+      "timeout": 60
+    },
+    "gigachat_latest": {
+      "provider": "gigachat",
+      "base_url": "https://gigachat.devices.sberbank.ru/api/v1",
+      "api_key_env": "GIGACHAT_API_KEY",
+      "model_id": "GigaChat:latest",
+      "scope": "GIGACHAT_API_PERS",
+      "verify_ssl_certs": false,
+      "temperature": 0.1
+    },
+    "gigachat_max": {
+      "provider": "gigachat",
+      "base_url": "https://gigachat.devices.sberbank.ru/api/v1",
+      "api_key_env": "GIGACHAT_API_KEY",
+      "model_id": "GigaChat-Max",
+      "scope": "GIGACHAT_API_PERS",
+      "verify_ssl_certs": false,
+      "temperature": 0.1
+    },
+    "minimax_m3": {
+      "provider": "minimax",
+      "base_url": "https://api.minimax.chat/v1",
+      "api_key_env": "MINIMAX_API_KEY",
+      "model_id": "MiniMax-M3",
+      "temperature": 0.1
+    }
+  }
+}

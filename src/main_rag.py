@@ -13,22 +13,17 @@ from aiogram.utils.text_decorations import html_decoration
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.utils.chat_action import ChatActionSender
 
-# Импортируем провайдеров
-from llama_index.llms.openai_like import OpenAILike
-from llama_index.llms.minimax import MiniMax
-from langchain_gigachat import GigaChat
-
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 os.environ["HF_DATASETS_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 # Наш класс RAG-системы
 from graphrag import GraphRag
+from llm_factory import LLMFactory
 
 # ── Конфиг ──
 from config import (
-    BOT_TOKEN, CLOUD_RU_API_KEY, MINIMAX_API_KEY, GIGACHAT_API_KEY,
-    MAIN_LLM_MODEL, MAIN_LLM_BASE, MAIN_LLM_TIMEOUT, MAIN_LLM_TEMPERATURE,
+    BOT_TOKEN,
     setup_logging,
 )
 
@@ -95,7 +90,7 @@ async def handle_user_message(message: Message, state: FSMContext):
             # Задаем жесткий общий таймаут на выполнение всей цепочки переключений (например, 35 секунд)
             reply = await asyncio.wait_for(
                 rag_system.get_response_async(
-                    user_query, start_llm='claude', history=raw_history,
+                    user_query, history=raw_history,
                     user_id=str(message.from_user.id)
                 ),
                 timeout=90.0
@@ -163,36 +158,11 @@ async def main():
         os.environ["HTTP_PROXY"] = PROXY_URL
         os.environ["HTTPS_PROXY"] = PROXY_URL
 
-    logger.info("Инициализация ИИ-моделей...")
-
-    # 1. Возвращаем Cloud.ru, но переключаем модель на Claude
-    main_llm = OpenAILike(
-        api_base=MAIN_LLM_BASE,
-        api_key=CLOUD_RU_API_KEY,
-        model=MAIN_LLM_MODEL,
-        is_chat_model=True,
-        temperature=MAIN_LLM_TEMPERATURE,
-        timeout=MAIN_LLM_TIMEOUT
-    )
-
-    # 2. Создаем MiniMax (резервный облачный провайдер)
-    minimax_llm = MiniMax(
-        model='MiniMax-M3',
-        api_key=MINIMAX_API_KEY,
-        temperature=MAIN_LLM_TEMPERATURE
-    )
-
-    # 3. Создаем бэкап-модель GigaChat через LangChain
-    gigachat_llm = GigaChat(
-        credentials=GIGACHAT_API_KEY,
-        model="GigaChat:latest",
-        verify_ssl_certs=False,
-        scope='GIGACHAT_API_PERS',
-        temperature=MAIN_LLM_TEMPERATURE
-    )
+    logger.info("Инициализация фабрики LLM-провайдеров...")
+    llm_factory = LLMFactory()
 
     logger.info("Загрузка базы знаний и инициализация RAG пайплайна...")
-    rag_system = GraphRag(llm=main_llm, gigachat_llm=gigachat_llm, minimax_llm=minimax_llm)
+    rag_system = GraphRag(llm_factory=llm_factory)
 
     logger.info("Telegram-бот Ментор успешно запущен!")
 

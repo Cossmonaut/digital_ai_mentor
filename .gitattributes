@@ -1,0 +1,23 @@
+# Автоматическая нормализация окончаний строк: в репозитории всегда LF,
+# в рабочей копе — LF (важно для shell-скриптов и Docker в Windows-окружении).
+* text=auto
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+# Бинарные файлы — не трогать
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary

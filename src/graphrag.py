@@ -16,10 +16,8 @@ from llama_index.core import (
 )
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from llama_index.llms.openai_like import OpenAILike
 from llama_index.core.indices.property_graph import SchemaLLMPathExtractor
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.llms.minimax import MiniMax
 from graph_knowledge_base import GraphKnowledgeBase
 from llama_index.core.indices.property_graph import PGRetriever
 from llama_index.core.postprocessor import SimilarityPostprocessor
@@ -27,6 +25,8 @@ from llama_index.core.chat_engine import CondensePlusContextChatEngine
 from llama_index.core.chat_engine import ContextChatEngine
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.storage.chat_store.redis import RedisChatStore
+
+from llm_factory import LLMFactory
 
 # ── Конфиг ──
 from config import (
@@ -40,11 +40,10 @@ logger = setup_logging()
 
 
 class GraphRag:
-    def __init__(self, llm, gigachat_llm, minimax_llm):
-        self.llm = llm
-        self.gigachat_llm = gigachat_llm
-        self.minimax_llm = minimax_llm
-        self.graph_bd = GraphKnowledgeBase(self.llm)
+    def __init__(self, llm_factory: LLMFactory):
+        self.llm_factory = llm_factory
+        # Для индексации/достраивания графа используем default-модель.
+        self.graph_bd = GraphKnowledgeBase(self.llm_factory.get_default_llm())
         self.index = self.graph_bd.init_index()
         self.load_prompts()
 
@@ -70,11 +69,8 @@ class GraphRag:
             logger.error(f"[Redis-Ошибка]: Не удалось подключить Redis ({e}). Откат на In-Memory.")
             self.chat_store = None
 
-        # Кеш chat‑движков per-user (создание ContextChatEngine дешёвое — держим в памяти)
-        self._user_engines: dict[str, ContextChatEngine] = {}
-
-        # Общий chat engine (fallback, если user_id не передан)
-        self.chat_engine = self._create_chat_engine(user_id="default")
+        # Кеш chat‑движков per-user и per-model (создание ContextChatEngine дешёвое — держим в памяти)
+        self._user_engines: dict[tuple[str, str], ContextChatEngine] = {}
 
     def load_prompts(self,
                      prompt_path=None,
@@ -93,7 +89,7 @@ class GraphRag:
         self.giga_system_instruction = config_giga.get("system_instruction")
         self.giga_context_prompt = config_giga.get('context_prompt')
 
-    def _create_chat_engine(self, user_id: str) -> ContextChatEngine:
+    def _create_chat_engine(self, llm, user_id: str) -> ContextChatEngine:
         """Создаёт ContextChatEngine с per-user Redis‑backed памятью."""
         if self.chat_store:
             memory = ChatMemoryBuffer.from_defaults(
@@ -105,7 +101,7 @@ class GraphRag:
             memory = ChatMemoryBuffer.from_defaults(token_limit=3000)
 
         return ContextChatEngine.from_defaults(
-            llm=self.llm,
+            llm=llm,
             system_prompt=self.system_instruction,
             context_prompt=self.context_prompt,
             verbose=False,
@@ -115,15 +111,15 @@ class GraphRag:
             memory=memory
         )
 
-    def get_user_chat_engine(self, user_id: str) -> ContextChatEngine:
-        """Возвращает (или создаёт) chat engine для конкретного пользователя."""
-        if user_id not in self._user_engines:
-            self._user_engines[user_id] = self._create_chat_engine(user_id)
-        return self._user_engines[user_id]
+    def get_user_chat_engine(self, llm, model_id: str, user_id: str) -> ContextChatEngine:
+        """Возвращает (или создаёт) chat engine для конкретного пользователя и модели."""
+        key = (user_id, model_id)
+        if key not in self._user_engines:
+            self._user_engines[key] = self._create_chat_engine(llm, user_id)
+        return self._user_engines[key]
 
-    async def get_response_async(self, query: str, start_llm: str = 'claude',
-                                  history=None, user_id: str = None) -> str:
-        """Двухступенчатый каскад: Claude → GigaChat (резерв) с кешированием в Redis."""
+    async def get_response_async(self, query: str, history=None, user_id: str = None) -> str:
+        """Каскад с health-check: default → fallback с кешированием в Redis."""
 
         # ── 1. Проверяем кеш ответа ──
         cache_key = None
@@ -138,14 +134,25 @@ class GraphRag:
             except Exception as e:
                 logger.warning(f"[Cache]: Не удалось проверить кеш ({e}). Продолжаем без кеша.")
 
-        # ── 2. Получаем chat engine для пользователя ──
-        chat_engine = self.get_user_chat_engine(user_id) if user_id else self.chat_engine
+        # ── 2. Выбираем первую доступную модель через фабрику ──
+        try:
+            resolved = await self.llm_factory.get_available_llm()
+            logger.info(
+                f"[RAG-Лог]: Запрос направлен в модель {resolved.model_id} "
+                f"(провайдер {resolved.provider}), user={user_id}"
+            )
+        except Exception as e:
+            logger.error(f"[RAG-Крах]: Ни одна модель не доступна: {e}", exc_info=True)
+            return "Извините, система временно перегружена. Пожалуйста, повторите запрос позже."
 
-        # ── Ступень 1: основной контур (Claude) ──
-        if start_llm == 'claude':
-            logger.info(f"[RAG-Лог]: Запрос направлен в Claude... user={user_id}")
+        # ── 3. Основной контур (OpenAI-like / MiniMax) ──
+        if resolved.provider != "gigachat":
+            chat_engine = (
+                self.get_user_chat_engine(resolved.llm, resolved.model_id, user_id)
+                if user_id
+                else self._create_chat_engine(resolved.llm, "default")
+            )
             try:
-                # Даем Claude 25 секунд. Если не успела — идём в надёжный GigaChat
                 response = await asyncio.wait_for(chat_engine.achat(query), timeout=45.0)
                 if response and response.response:
                     # Кешируем ответ
@@ -158,16 +165,23 @@ class GraphRag:
                         except Exception as e:
                             logger.warning(f"[Cache]: Не удалось записать в кеш ({e}).")
                     return response.response
-                raise ValueError("Пустой ответ от Claude")
+                raise ValueError(f"Пустой ответ от модели {resolved.model_id}")
             except Exception as e:
-                logger.warning(f"[RAG-Предупреждение]: Claude дала сбой или таймаут ({e}). "
-                               f"Срочный переход на GigaChat...")
+                logger.warning(
+                    f"[RAG-Предупреждение]: Модель {resolved.model_id} дала сбой или таймаут ({e}). "
+                    f"Переход на следующую доступную модель..."
+                )
+                # Пробуем fallback, исключая текущую модель
+                return await self._try_fallback(
+                    query, cache_key, exclude_model_id=resolved.model_id, user_id=user_id
+                )
 
-        # ── Ступень 2: отечественный резервный контур (GigaChat) ──
+        # ── 4. Резервный контур GigaChat ──
         logger.info(f"[RAG-Лог]: Запуск резервного сценария GigaChat... user={user_id}")
         try:
-            response = await self.gigachat_retriever_async(query, user_id=user_id)
-            # Кешируем и GigaChat‑ответ
+            response = await self.gigachat_retriever_async(
+                query, llm=resolved.llm, user_id=user_id
+            )
             if cache_key and response:
                 try:
                     await self.redis_client.setex(cache_key, CACHE_TTL_SECONDS, response)
@@ -175,10 +189,47 @@ class GraphRag:
                     pass
             return response
         except Exception as e:
-            logger.error(f"[RAG-Крах]: Сбой всех систем: {e}", exc_info=True)
+            logger.error(f"[RAG-Крах]: Сбой GigaChat: {e}", exc_info=True)
+            return await self._try_fallback(
+                query, cache_key, exclude_model_id=resolved.model_id, user_id=user_id
+            )
+
+    async def _try_fallback(
+        self,
+        query: str,
+        cache_key: str | None,
+        exclude_model_id: str,
+        user_id: str | None,
+    ) -> str:
+        """Пробует следующую доступную модель, исключая уже отработавшую."""
+        try:
+            resolved = await self.llm_factory.get_available_llm(exclude=[exclude_model_id])
+            logger.info(f"[RAG-Лог]: Fallback в модель {resolved.model_id}, user={user_id}")
+        except Exception as e:
+            logger.error(f"[RAG-Крах]: Fallback невозможен: {e}", exc_info=True)
             return "Извините, система временно перегружена. Пожалуйста, повторите запрос позже."
 
-    async def gigachat_retriever_async(self, query: str, user_id: str = None) -> str:
+        if resolved.provider == "gigachat":
+            response = await self.gigachat_retriever_async(
+                query, llm=resolved.llm, user_id=user_id
+            )
+        else:
+            chat_engine = (
+                self.get_user_chat_engine(resolved.llm, resolved.model_id, user_id)
+                if user_id
+                else self._create_chat_engine(resolved.llm, "default")
+            )
+            response_obj = await asyncio.wait_for(chat_engine.achat(query), timeout=45.0)
+            response = response_obj.response if response_obj and response_obj.response else ""
+
+        if cache_key and response:
+            try:
+                await self.redis_client.setex(cache_key, CACHE_TTL_SECONDS, response)
+            except Exception:
+                pass
+        return response
+
+    async def gigachat_retriever_async(self, query: str, llm, user_id: str = None) -> str:
         """Асинхронный отказоустойчивый ретривер для GigaChat."""
         # Извлекаем ноды напрямую через кастомный ретривер
         nodes_with_scores = await self.custom_retriever.aretrieve(query)
@@ -249,7 +300,7 @@ class GraphRag:
         ]
 
         # Вызов GigaChat через асинхронный метод langchain ainvoke
-        response = await self.gigachat_llm.ainvoke(message_template)
+        response = await llm.ainvoke(message_template)
         return response.content
 
     def compact_context(self):

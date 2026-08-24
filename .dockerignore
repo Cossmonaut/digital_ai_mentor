@@ -67,8 +67,8 @@ src/main.py
 # Docker
 Dockerfile
 .dockerignore
-docker-compose.yaml
-utils/docker-compose.yaml
+docker-compose.yml
+docker/
 
 # Документация
 README.md

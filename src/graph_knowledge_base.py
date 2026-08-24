@@ -20,7 +20,7 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 # ── Конфиг ──
 from config import (
     NEO4J_USERNAME, NEO4J_PASSWORD, NEO4J_URL,
-    LOCAL_MODEL_DIR, DATA_DIR, setup_logging,
+    LOCAL_MODEL_DIR, HF_MODELS_CACHE, DATA_DIR, setup_logging,
 )
 
 nest_asyncio.apply()
@@ -48,9 +48,11 @@ class GraphKnowledgeBase:
         except:
             # Откат на стандартное поведение (например, для корпоративной сети, где интернет есть)
             print("[Сеть]: Локальная папка модели не найдена. Загрузка в кэш по умолчанию...")
+            # ИСПРАВЛЕНО: абсолютный путь из конфига вместо относительного ../utils,
+            # который в контейнере с WORKDIR=/app разрешался в /utils и вызывал PermissionError.
             self.embed_model = HuggingFaceEmbedding(
                 model_name="BAAI/bge-m3",
-                cache_folder="../utils/hf_models_cache"  
+                cache_folder=str(HF_MODELS_CACHE)
             )
         
 
